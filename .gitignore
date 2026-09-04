@@ -3,6 +3,6 @@
 **/fixtures/keys.json
 customer_info.md
 docs/*.pdf
-harness/runs/
+output/
 __pycache__/
 *.pyc

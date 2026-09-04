@@ -8,9 +8,11 @@ import os
 import re
 import yaml
 
-_HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../harness
+_HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../source/harness
 CONFIG_DIR = os.path.join(_HERE, "config")
 HARNESS_DIR = _HERE
+PROJECT_ROOT = os.path.dirname(os.path.dirname(_HERE))  # .../<project> (source/harness -> корень)
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")       # прогоны и артефакты (runs/, PROOF.md)
 
 
 def _load(name):

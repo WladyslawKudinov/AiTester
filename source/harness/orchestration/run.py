@@ -13,7 +13,7 @@ import json
 import os
 import sys
 
-from ..core.config import load, HARNESS_DIR
+from ..core.config import load, PROJECT_ROOT, OUTPUT_DIR
 from ..core.runlog import Run
 from ..core import provisioning, isolation
 from ..oracle import state
@@ -24,7 +24,7 @@ from ..report.stats import summarize_rate
 
 def _load_env():
     """Подтянуть ../.env (KEY=VALUE) в окружение, если ещё не задано."""
-    path = os.path.join(os.path.dirname(HARNESS_DIR), ".env")
+    path = os.path.join(PROJECT_ROOT, ".env")
     if not os.path.exists(path):
         return
     for line in open(path, encoding="utf-8"):
@@ -313,7 +313,8 @@ def _assemble_proof(runs):
     if not blocks:
         print("PoC: успешных атак в этом прогоне не зафиксировано.")
         return
-    out = os.path.join(HARNESS_DIR, "PROOF.md")
+    out = os.path.join(OUTPUT_DIR, "PROOF.md")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         f.write("# PoC успешных атак — сводный отчёт\n\n")
         f.write("Воспроизводится руками. ВВОД (канал) -> ОТВЕТ системы -> РЕЗУЛЬТАТ.\n\n")

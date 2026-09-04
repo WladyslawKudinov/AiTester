@@ -9,7 +9,7 @@ import os
 import time
 import uuid
 
-from .config import HARNESS_DIR
+from .config import OUTPUT_DIR
 
 
 class Run:
@@ -17,7 +17,7 @@ class Run:
         self.cfg = cfg
         rid = name or time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:4]
         self.run_id = rid
-        self.dir = os.path.join(HARNESS_DIR, "runs", rid)
+        self.dir = os.path.join(OUTPUT_DIR, "runs", rid)
         os.makedirs(self.dir, exist_ok=True)
         self._attempts = os.path.join(self.dir, "attempts.jsonl")
         self.t0 = time.time()

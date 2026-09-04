@@ -26,12 +26,12 @@ echo 'OPENROUTER_API_KEY=sk-or-v1-...' > .env      # ключ для слото�
 ## Запуск
 
 ```bash
-./.venv/bin/python -m harness.orchestration.run smoke              # провижининг, чат, оракул, teardown (без LLM)
-./.venv/bin/python -m harness.orchestration.run bac    --attempts 5   # Таск A: BAC (3 канала), findings
-./.venv/bin/python -m harness.orchestration.run poison --attempts 6   # Таск B: отравление, E1..E4, landing-rate
-./.venv/bin/python -m harness.orchestration.run chain  --attempts 4   # связка A×B: чужой id через память -> BAC
-./.venv/bin/python -m harness.orchestration.run models --attempts 6   # сравнение атакующих моделей (мутатор)
-./.venv/bin/python -m harness.orchestration.run all    --attempts 6   # bac + poison
+./.venv/bin/python run.py smoke              # провижининг, чат, оракул, teardown (без LLM)
+./.venv/bin/python run.py bac    --attempts 5   # Таск A: BAC (3 канала), findings
+./.venv/bin/python run.py poison --attempts 6   # Таск B: отравление, E1..E4, landing-rate
+./.venv/bin/python run.py chain  --attempts 4   # связка A×B: чужой id через память -> BAC
+./.venv/bin/python run.py models --attempts 6   # сравнение атакующих моделей (мутатор)
+./.venv/bin/python run.py all    --attempts 6   # bac + poison
 ```
 
 Прогресс идёт в консоль (stderr) в реальном времени: этапы каналов и тики по каждой попытке
