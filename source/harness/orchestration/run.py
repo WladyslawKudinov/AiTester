@@ -121,13 +121,13 @@ def cmd_bac(cfg, attempts):
 
     doc = F.write(run, fs, _meta(cfg))
     COV.write(run)
-    _proof_note(run)
-    bp = bac_proof.build(run.dir)
+    bp = bac_proof.build(run.dir)          # ЕДИНЫЙ BAC-отчёт: пишет run.dir/proof.md
     if bp:
-        top = os.path.join(OUTPUT_DIR, "BAC_PROOF.md")
+        top = os.path.join(OUTPUT_DIR, "PROOF.md")
         with open(bp, encoding="utf-8") as s, open(top, "w", encoding="utf-8") as t:
             t.write(s.read())
-        print(f"Первичные запросы к агенту (все, с вердиктом утечки) -> {bp}")
+        print(f"PoC BAC (что написал юзер + REST) -> {bp}\n"
+              f"  сводный (тот же файл) -> {top}")
     print(f"findings: {doc['count']} -> {run.path('findings.json')}")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return run
@@ -147,11 +147,11 @@ def cmd_bac_proof(cfg, run_id=None):
         run_dir = max(cands, key=lambda d: os.path.getmtime(os.path.join(d, "attempts.jsonl")))
     bp = bac_proof.build(run_dir)
     if bp:
-        top = os.path.join(OUTPUT_DIR, "BAC_PROOF.md")
+        top = os.path.join(OUTPUT_DIR, "PROOF.md")
         with open(bp, encoding="utf-8") as s, open(top, "w", encoding="utf-8") as t:
             t.write(s.read())
-        print(f"Первичные запросы к агенту (все) -> {bp}")
-        print(f"Верхнеуровневая копия -> {top}")
+        print(f"PoC BAC (что написал юзер + REST) -> {bp}")
+        print(f"Сводный (тот же файл) -> {top}")
         return 0
     print(f"bac-proof: в {os.path.basename(run_dir)} нет BAC-попыток.")
     return 1
@@ -429,7 +429,7 @@ def main(argv=None):
     if args.cmd == "smoke":
         return cmd_smoke(cfg)
     if args.cmd == "bac":
-        _assemble_proof([cmd_bac(cfg, args.attempts)])
+        cmd_bac(cfg, args.attempts)          # сам пишет единый proof.md -> output/PROOF.md
         return 0
     if args.cmd == "poison":
         _assemble_proof([cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)])

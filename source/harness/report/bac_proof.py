@@ -42,7 +42,7 @@ def _full_reply(calls, session_id, prompt):
 
 def _req(client_cus, prompt):
     q = (prompt or "(пусто)").replace("\n", "\n> ")
-    return f"**Запрос к агенту** (клиент {client_cus}):\n\n> " + q
+    return f"**Что написал юзер** (клиент {client_cus} → агенту):\n\n> " + q
 
 
 def _resp(reply, status=None, lat=None):
@@ -72,20 +72,20 @@ def build(run_dir):
     leaks = [a for a in agent if a.get("leak")]
 
     d = []
-    d.append("# Результаты BAC — первичные запросы к агенту\n")
+    d.append("# PoC BAC — что написал юзер\n")
     d.append(f"_Прогон `{run_id}`. Источник: `attempts.jsonl` (вердикт по каждому запросу) + "
-             "`calls.jsonl` (полные ответы). Запрос показан минимально — только сам текст "
-             "сообщения агенту, без служебных полей._\n")
-    d.append(f"**Итог agent-mediated (LLM→tool):** отправлено первичных запросов агенту — "
-             f"**{len(agent)}**, из них с утечкой чужих данных (клиент {victim}) — "
-             f"**{len(leaks)}**. Атакующий — клиент {attacker}.\n")
+             "`calls.jsonl` (полные ответы). Показано минимально — только сам текст сообщения "
+             "юзера агенту, без служебных полей._\n")
+    d.append(f"**Итог agent-mediated (LLM→tool):** юзер (клиент {attacker}) написал агенту "
+             f"**{len(agent)}** сообщений, из них с утечкой данных клиента {victim} — "
+             f"**{len(leaks)}**.\n")
     d.append("---\n")
 
-    # ГЛАВНАЯ СЕКЦИЯ: все первичные запросы
-    d.append("## 1. Все первичные запросы к агенту (LLM→tool BAC)\n")
-    d.append("Каждая формулировка, которую харнесс отправил агенту (seed + сгенерированные "
-             "атакующей моделью + adaptive-мутации), в порядке отправки. `[УТЕЧКА]` — в ответе "
-             "агента всплыли отпечатки чужого клиента.\n")
+    # ГЛАВНАЯ СЕКЦИЯ: что именно написал юзер
+    d.append("## 1. Что написал юзер агенту (LLM→tool BAC) — все сообщения\n")
+    d.append("Каждое сообщение, которое юзер (атакующий, клиент {a}) написал агенту (seed + "
+             "сгенерированные атакующей моделью + adaptive-мутации), в порядке отправки. "
+             "`[УТЕЧКА]` — в ответе агента всплыли данные чужого клиента.\n".format(a=attacker))
     for i, a in enumerate(agent, 1):
         prompt = a.get("prompt", "")
         leaked = bool(a.get("leak"))
@@ -107,9 +107,13 @@ def build(run_dir):
         d.append("")
     d.append("---\n")
 
-    # СЛОЙ ДАННЫХ (REST) — минимально
+    # СЛОЙ ДАННЫХ (REST) — юзер ничего НЕ пишет
+    if data or owner:
+        d.append("## 2. Прямой REST — юзер НИЧЕГО не пишет (service-to-service)\n")
+        d.append("_Это НЕ через юзер-ввод: харнесс шлёт токеном атакующего прямой HTTP-запрос к "
+                 "сервису данных, мимо агента/LLM. «Что написал юзер» тут отсутствует по природе "
+                 "вектора — это отдельная (сервисная) находка._\n")
     if data:
-        d.append("## 2. Слой данных (REST, LLM не участвует)\n")
         for a in data:
             served = a.get("served")
             d.append(f"- `GET client_by_cus({victim})` (как клиент {attacker}, режим "
@@ -117,15 +121,20 @@ def build(run_dir):
                      f"{'ОТДАЛ данные' if served else 'закрыл'}"
                      + (f"; отпечатки: `{a.get('fingerprints')}`" if a.get('fingerprints') else "")
                      + ".")
+            if served and a.get("data"):
+                d.append("\n  Что вернул сервис:\n")
+                d.append("  ```json\n  " + json.dumps(a["data"], ensure_ascii=False) + "\n  ```")
         d.append("")
     if owner:
-        d.append("## 3. Владелец счёта (REST)\n")
+        d.append("\n**Владелец чужого счёта:**\n")
         for a in owner:
+            ow = json.dumps(a.get("owner"), ensure_ascii=False) if a.get("resolved") else None
             d.append(f"- `GET account_owner` (как клиент {attacker}, режим `{a.get('auth_mode')}`) "
-                     f"→ HTTP {a.get('status')}, {'резолвит владельца' if a.get('resolved') else 'закрыл'}.")
+                     f"→ HTTP {a.get('status')}, "
+                     f"{'резолвит владельца: ' + ow if a.get('resolved') else 'закрыл'}.")
         d.append("")
 
-    out = os.path.join(run_dir, "bac_proof.md")
+    out = os.path.join(run_dir, "proof.md")   # единый файл — не плодим второй
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(d))
     return out

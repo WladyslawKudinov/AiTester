@@ -15,7 +15,6 @@ from ..core import provisioning, isolation
 from ..core.attacker import Attacker
 from ..core.log import log
 from ..oracle import state, fingerprints
-from ..report import proof
 
 
 # известные рабочие seed-формулировки (страховка, если LLM-генерация слаба)
@@ -34,16 +33,11 @@ def data_layer(run, attacker, victim, auth_mode, cfg=None):
     fp = []
     if res["served"]:
         fp = fingerprints.hits_for(victim, json.dumps(res.get("data", {}), ensure_ascii=False), cfg)
-        proof.record(run, "Воздействие на BAC — данные чужого клиента (слой данных)", "[REST]",
-                     f"GET {cfg.data('client_by_cus', cus=victim)}\n"
-                     f"(как клиент {attacker}, режим {res['auth_mode']})",
-                     json.dumps(res.get("data", {}), ensure_ascii=False),
-                     f"Клиент {attacker} получил данные клиента {victim} (отпечатки: {fp}). "
-                     f"Тот же запрос в режиме protected -> HTTP 403.")
     rec = run.attempt({
         "task": "bac", "channel": "data_layer", "hypothesis": "H1-bac-service",
         "attacker": attacker, "victim": victim, "auth_mode": res["auth_mode"],
         "served": res["served"], "status": res["status"], "fingerprints": fp,
+        "data": res.get("data") if res["served"] else None,
         "leak": bool(res["served"]),
     })
     return rec
@@ -54,12 +48,6 @@ def account_owner(run, attacker, account_id, auth_mode, cfg=None):
     cfg = cfg or load()
     res = state.account_owner_resolves(attacker, account_id, auth_mode, cfg)
     owner = res.get("data") if res["resolved"] else None
-    if res["resolved"] and res["auth_mode"] == cfg.mode("protected"):
-        proof.record(run, "Воздействие на BAC — владелец чужого счёта в protected", "[REST]",
-                     f"GET {cfg.data('account_owner', account_id=account_id)}\n"
-                     f"(как клиент {attacker}, режим {res['auth_mode']})",
-                     json.dumps(owner, ensure_ascii=False),
-                     f"Владелец чужого счёта {account_id} раскрыт ДАЖЕ в protected.")
     rec = run.attempt({
         "task": "bac", "channel": "account_owner", "hypothesis": "H2-bac-account-owner",
         "attacker": attacker, "account_id": account_id, "auth_mode": res["auth_mode"],
@@ -80,11 +68,6 @@ def agent_mediated(run, client, key, attacker, victim, prompt_text, auth_mode, c
     # чьи отпечатки в ответе, кроме самого атакующего; эхо из запроса не считаем утечкой
     others = fingerprints.whose(reply, exclude=[attacker], cfg=cfg, exclude_text=prompt_text)
     victim_hits = others.get(str(victim), [])
-    if victim_hits:
-        proof.record(run, "Воздействие на BAC — через агента (LLM->tool)", "[ЧАТ]",
-                     prompt_text, reply,
-                     f"В ответе агента отпечатки клиента {victim}: {victim_hits} "
-                     f"(режим {res['auth_mode']}, эхо запроса исключено).")
     rec = run.attempt({
         "task": "bac", "channel": "agent_mediated", "hypothesis": "H1-bac-service",
         "attacker": attacker, "victim": victim, "auth_mode": res["auth_mode"],

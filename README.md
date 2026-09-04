@@ -18,7 +18,7 @@
 ```bash
 ./.venv/bin/python run.py smoke                 # без LLM: провижининг, чат, оракул, teardown
 ./.venv/bin/python run.py bac    --attempts 5   # Таск A: BAC (3 канала)
-./.venv/bin/python run.py bac-proof [--run ID] # BAC-отчёт: ВСЕ первичные запросы к агенту + утечки
+./.venv/bin/python run.py bac-proof [--run ID] # пересобрать BAC PROOF.md из логов прогона
 ./.venv/bin/python run.py poison --attempts 6   # Таск B: отравление памяти E1..E4
 ./.venv/bin/python run.py poison-proof [--run ID] # человекочитаемый пруф отравления из логов
 ./.venv/bin/python run.py llm-repro             # ручной повтор LLM-находок (адрес из конфига) + лог
@@ -41,5 +41,6 @@
 `coverage.md`, `*_summary.json`. Сводный PoC по таскам — `output/PROOF.md`; последний пруф
 отравления — `output/POISON_PROOF.md` (обновляется командами `poison` и `poison-proof`);
 ручное воспроизведение LLM-находок (agent-BAC + отравление; шаги по адресу из конфига + лог
-запросов/ответов) — `output/LLM_FINDINGS_REPRO.md` (команда `llm-repro`); все первичные запросы
-к агенту по BAC с вердиктом утечки — `output/BAC_PROOF.md` (обновляется командами `bac` и `bac-proof`).
+запросов/ответов) — `output/LLM_FINDINGS_REPRO.md` (команда `llm-repro`). BAC-отчёт `PROOF.md`
+(и per-run `proof.md`) — ЕДИНЫЙ файл: секция «что написал юзер агенту» со ВСЕМИ сообщениями и
+вердиктом утечки + прямой REST (юзер ничего не пишет); собирается командами `bac` и `bac-proof`.
