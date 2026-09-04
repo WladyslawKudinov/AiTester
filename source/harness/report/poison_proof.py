@@ -89,12 +89,14 @@ def _victim_read(marker, calls):
 # ---- рендер ---------------------------------------------------------------
 
 def _http_block(url, client_cus, body):
-    lines = [f"POST {url}",
-             f"Authorization: Bearer <ключ клиента {client_cus}>",
-             "Content-Type: application/json",
-             "",
-             json.dumps(body, ensure_ascii=False, indent=2)]
-    return "```\n" + "\n".join(lines) + "\n```"
+    """Минимальный вид запроса к агенту: только САМО сообщение (то, что вызывает эффект).
+    Без служебных полей (model/stream/session_id/токен/Content-Type/URL)."""
+    content = ""
+    for m in (body.get("messages") or []):
+        if m.get("role") == "user":
+            content = m.get("content", "")
+    body_q = (content or "(пусто)").replace("\n", "\n> ")
+    return f"**Запрос к агенту** (клиент {client_cus}):\n\n> " + body_q
 
 
 def _reply_block(call):
@@ -111,11 +113,10 @@ def _finalize_line(fins):
     if not fins:
         return "_(вызов финализации в логах не найден)_"
     codes = ", ".join(str(c.get("status")) for c in fins)
-    url = fins[-1].get("url")
     note = ""
     if any(c.get("status") != 200 for c in fins) and fins[-1].get("status") == 200:
         note = "  _(суммаризатор нестабилен → ретраи; консолидация удалась на последней попытке)_"
-    return f"`POST {url}` → {codes}{note}"
+    return f"**Финализация сессии** → HTTP {codes}{note}"
 
 
 def _landing_delta(attempt):

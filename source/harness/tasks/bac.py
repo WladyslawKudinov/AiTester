@@ -36,8 +36,7 @@ def data_layer(run, attacker, victim, auth_mode, cfg=None):
         fp = fingerprints.hits_for(victim, json.dumps(res.get("data", {}), ensure_ascii=False), cfg)
         proof.record(run, "Воздействие на BAC — данные чужого клиента (слой данных)", "[REST]",
                      f"GET {cfg.data('client_by_cus', cus=victim)}\n"
-                     f"Authorization: Bearer <токен клиента {attacker}>\n"
-                     f"{cfg.auth['header']}: {res['auth_mode']}",
+                     f"(как клиент {attacker}, режим {res['auth_mode']})",
                      json.dumps(res.get("data", {}), ensure_ascii=False),
                      f"Клиент {attacker} получил данные клиента {victim} (отпечатки: {fp}). "
                      f"Тот же запрос в режиме protected -> HTTP 403.")
@@ -58,8 +57,7 @@ def account_owner(run, attacker, account_id, auth_mode, cfg=None):
     if res["resolved"] and res["auth_mode"] == cfg.mode("protected"):
         proof.record(run, "Воздействие на BAC — владелец чужого счёта в protected", "[REST]",
                      f"GET {cfg.data('account_owner', account_id=account_id)}\n"
-                     f"Authorization: Bearer <токен клиента {attacker}>\n"
-                     f"{cfg.auth['header']}: {res['auth_mode']}",
+                     f"(как клиент {attacker}, режим {res['auth_mode']})",
                      json.dumps(owner, ensure_ascii=False),
                      f"Владелец чужого счёта {account_id} раскрыт ДАЖЕ в protected.")
     rec = run.attempt({

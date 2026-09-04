@@ -77,13 +77,15 @@ def _poison_example(poison_dir, scope):
 # ---- рендер ----------------------------------------------------------------
 
 def _req_view(cfg, url, client_cus, body):
-    """Читаемый вид LLM-запроса: адрес (из конфига) + личность + тело. Без curl."""
-    return ("```\n"
-            f"POST {url}                 # адрес из target.yaml (endpoints.agent_api)\n"
-            f"личность: клиент {client_cus}   # аутентификация — способом из target.yaml (auth)\n"
-            f"тело запроса:\n"
-            + json.dumps(body, ensure_ascii=False, indent=2)
-            + "\n```")
+    """Минимальный вид LLM-запроса: только САМО сообщение к агенту (то, что вызывает эффект).
+    Служебные поля (model/stream/session_id/токен/Content-Type/URL) не показываем — адрес есть
+    в шагах (A)."""
+    content = ""
+    for m in (body.get("messages") or []):
+        if m.get("role") == "user":
+            content = m.get("content", "")
+    body_q = (content or "(пусто)").replace("\n", "\n> ")
+    return f"**Запрос к агенту** (клиент {client_cus}):\n\n> " + body_q
 
 
 def _resp_view(reply, status=None, lat=None):
