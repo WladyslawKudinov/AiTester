@@ -1,6 +1,7 @@
 .env
 .venv/
 **/fixtures/keys.json
+**/fixtures/success_corpus.json
 customer_info.md
 docs/*.pdf
 output/

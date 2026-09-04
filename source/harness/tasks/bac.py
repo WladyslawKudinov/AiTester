@@ -14,7 +14,13 @@ from ..core.client import AgentClient
 from ..core import provisioning, isolation
 from ..core.attacker import Attacker
 from ..core.log import log
+from ..core import corpus
 from ..oracle import state, fingerprints
+
+
+def _templatize(prompt, victim, account_id):
+    """Обобщить выигравшую формулировку: чужие id -> плейсхолдеры (переносимый темплейт корпуса)."""
+    return (prompt or "").replace(str(account_id), "{account_id}").replace(str(victim), "{cus}")
 
 
 # известные рабочие seed-формулировки (страховка, если LLM-генерация слаба)
@@ -125,7 +131,9 @@ def agent_mediated_campaign(run, cfg=None, attacker=None, victim=None, auth_mode
     if attacker_models is None:
         attacker_models = [cfg.slot_default("attacker")] if use_llm else [None]
 
-    # набор запросов = (seed?) + сгенерированные каждой атакующей моделью
+    # выигравшие ранее темплейты из корпуса — подаём модели как few-shot для адаптации
+    seeds = corpus.templates("bac_agent") if use_llm else []
+    # набор запросов = (seed?) + сгенерированные каждой атакующей моделью (с учётом корпуса)
     per_model = {}
     total_attempts = total_leaks = 0
     examples = []
@@ -133,7 +141,8 @@ def agent_mediated_campaign(run, cfg=None, attacker=None, victim=None, auth_mode
         prompts = [p.format(cus=victim, account_id=account_id) for p in SEED_PROMPTS] if include_seeds else []
         if use_llm and attacker_gen is not None:
             try:
-                prompts += attacker_gen.gen_bac_prompts(attacker, victim, account_id, n=n_gen, model=am)
+                prompts += attacker_gen.gen_bac_prompts(attacker, victim, account_id, n=n_gen,
+                                                        model=am, seeds=seeds)
             except Exception as e:
                 run.attempt({"task": "bac", "event": "gen_error", "model": am, "error": str(e)[:200]})
         log(f"атакующий {am}: {len(prompts)} формулировок ({auth_mode})")
@@ -145,6 +154,7 @@ def agent_mediated_campaign(run, cfg=None, attacker=None, victim=None, auth_mode
             log(f"[{i + 1}/{len(prompts)}] leak={rec['leak']}", sub=True)
             if rec["leak"]:
                 leaks += 1
+                corpus.record("bac_agent", _templatize(rec["prompt"], victim, account_id))
                 if len(examples) < 5:
                     examples.append({"model": am, "prompt": rec["prompt"],
                                      "hits": rec["victim_fingerprints"]})

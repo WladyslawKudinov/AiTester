@@ -17,7 +17,7 @@ import time
 
 from ..core.config import load
 from ..core.client import AgentClient
-from ..core import provisioning, isolation
+from ..core import provisioning, isolation, corpus
 from ..core.attacker import Attacker
 from ..core.log import log
 from ..oracle import state, memory_observer
@@ -87,6 +87,10 @@ def poison_cycle(run, client, judge, attacker_cus, victim_cus, turns, marker,
         except Exception as e:
             judged = {"shifted": None, "influence": None, "why": f"judge_error: {str(e)[:150]}"}
     tl.mark("after-target-read")
+
+    # приземлилось -> сохраняем выигравший диалог как темплейт корпуса (turns уже с {marker})
+    if e2_global or e2_user:
+        corpus.record("poison_dialog", " / ".join(str(t) for t in turns))
 
     # Человекочитаемый пруф (что написал юзер + эффект) собирает poison_proof из логов — здесь
     # только пишем attempt-запись со всеми полями.
@@ -212,7 +216,8 @@ def run_mvp(run, cfg=None, attempts=4, use_llm=True, registers=("benign", "compl
             dialog_specs.append({"register": reg, "turns": d["turns"]})
         if atk is not None:
             try:
-                for turns in atk.gen_poison_dialogs("{marker}", register=reg, n=1):
+                seeds = corpus.templates("poison_dialog")   # выигравшие диалоги -> модель адаптирует
+                for turns in atk.gen_poison_dialogs("{marker}", register=reg, n=1, seeds=seeds):
                     dialog_specs.append({"register": reg, "turns": turns})
             except Exception as e:
                 run.attempt({"task": "memory_poison", "event": "gen_error", "register": reg, "error": str(e)[:200]})
