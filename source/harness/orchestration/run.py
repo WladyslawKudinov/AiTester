@@ -20,6 +20,7 @@ from ..oracle import state
 from ..report import findings as F
 from ..report import coverage as COV
 from ..report import poison_proof
+from ..report import llm_repro
 from ..report.stats import summarize_rate
 
 
@@ -216,6 +217,16 @@ def cmd_poison_proof(cfg, run_id=None):
     return 1
 
 
+def cmd_llm_repro(cfg):
+    """Собрать артефакт ручного воспроизведения LLM-находок (agent-BAC + отравление):
+    на каждую находку — config-driven шаги (адрес из target.yaml) + лог реальных запросов."""
+    out = os.path.join(OUTPUT_DIR, "LLM_FINDINGS_REPRO.md")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    path = llm_repro.build(cfg, out)
+    print(f"Ручное воспроизведение LLM-находок (адрес из конфига) -> {path}")
+    return 0
+
+
 def _publish_poison_proof(pp_path):
     """Скопировать свежесобранный poison_proof.md в стабильный output/POISON_PROOF.md."""
     top = os.path.join(OUTPUT_DIR, "POISON_PROOF.md")
@@ -374,8 +385,8 @@ def main(argv=None):
     _load_env()
     cfg = load()
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["smoke", "bac", "poison", "poison-proof", "models",
-                                    "chain", "repro", "mem", "all"])
+    ap.add_argument("cmd", choices=["smoke", "bac", "poison", "poison-proof", "llm-repro",
+                                    "models", "chain", "repro", "mem", "all"])
     ap.add_argument("--attempts", type=int, default=5)
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--marker", default=None, help="mem: искать эту метку по ярусам памяти")
@@ -393,6 +404,8 @@ def main(argv=None):
         return 0
     if args.cmd == "poison-proof":
         return cmd_poison_proof(cfg, run_id=args.run)
+    if args.cmd == "llm-repro":
+        return cmd_llm_repro(cfg)
     if args.cmd == "models":
         cmd_models(cfg, n_gen=args.attempts)
         return 0

@@ -20,6 +20,7 @@
 ./.venv/bin/python run.py bac    --attempts 5   # Таск A: BAC (3 канала)
 ./.venv/bin/python run.py poison --attempts 6   # Таск B: отравление памяти E1..E4
 ./.venv/bin/python run.py poison-proof [--run ID] # человекочитаемый пруф отравления из логов
+./.venv/bin/python run.py llm-repro             # ручной повтор LLM-находок (адрес из конфига) + лог
 ./.venv/bin/python run.py chain  --attempts 4   # связка A×B: чужой id через память -> BAC
 ./.venv/bin/python run.py models --attempts 6   # сравнение атакующих моделей (мутатор)
 ./.venv/bin/python run.py all    --attempts 6   # bac + poison
@@ -37,4 +38,6 @@
 атак, воспроизводимо руками), `poison_proof.md` (пруф отравления: дословные запросы из `calls.jsonl`
 + вердикт оракула по стадиям E1..E4), `attempts.jsonl`, `calls.jsonl`, `openrouter.jsonl`,
 `coverage.md`, `*_summary.json`. Сводный PoC по таскам — `output/PROOF.md`; последний пруф
-отравления — `output/POISON_PROOF.md` (обновляется командами `poison` и `poison-proof`).
+отравления — `output/POISON_PROOF.md` (обновляется командами `poison` и `poison-proof`);
+ручное воспроизведение LLM-находок (agent-BAC + отравление; шаги по адресу из конфига + лог
+запросов/ответов) — `output/LLM_FINDINGS_REPRO.md` (команда `llm-repro`).

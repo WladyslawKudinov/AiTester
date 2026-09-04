@@ -234,7 +234,7 @@ def run_mvp(run, cfg=None, attempts=4, use_llm=True, registers=("benign", "compl
                 run.attempt({"task": "memory_poison", "event": "gen_error", "register": reg, "error": str(e)[:200]})
 
     log(f"собрано {len(dialog_specs)} вариантов payload по регистрам {list(registers)}")
-    marker_fn = lambda: isolation.fresh_marker("ZOO")  # noqa: E731
+    marker_fn = lambda: isolation.fresh_marker()  # noqa: E731
 
     baseline = clean_baseline(run, client, attacker, attempts=attempts, cfg=cfg)
     sweep = landing_sweep(run, client, judge, dialog_specs, marker_fn, attacker, victim,
