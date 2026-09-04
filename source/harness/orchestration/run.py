@@ -377,8 +377,9 @@ def _assemble_proof(runs):
 
 
 def _stamp():
+    """Читаемая метка даты-времени для папки прогона: <task>-2026-09-04_19-35-46."""
     import time
-    return time.strftime("%Y%m%d-%H%M%S")
+    return time.strftime("%Y-%m-%d_%H-%M-%S")
 
 
 def main(argv=None):
