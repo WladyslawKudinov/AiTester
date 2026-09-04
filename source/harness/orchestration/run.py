@@ -211,11 +211,10 @@ def cmd_poison(cfg, attempts, use_llm):
 
     doc = F.write(run, fs, _meta(cfg))
     COV.write(run)
-    _proof_note(run)
-    pp = poison_proof.build(run.dir)
+    pp = poison_proof.build(run.dir)         # ЕДИНЫЙ отчёт отравления: run.dir/proof.md
     if pp:
-        _publish_poison_proof(pp)
-        print(f"Пруф воздействия (реконструкция запросов из логов) -> {pp}")
+        top = _publish_poison_proof(pp)      # -> output/POISON_PROOF.md
+        print(f"PoC отравление (что написал юзер) -> {pp}\n  сводный (тот же файл) -> {top}")
     print(f"findings: {doc['count']} -> {run.path('findings.json')}")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return run
@@ -383,30 +382,6 @@ def _proof_note(run):
         print(f"PoC успешных атак (воспроизводимо руками) -> {p}")
 
 
-def _assemble_proof(runs):
-    """Свести proof.md всех тасков прогона в один PROOF.md (BAC + память вместе)."""
-    blocks = []
-    for run in runs:
-        p = run.path("proof.md")
-        if not os.path.exists(p):
-            continue
-        text = open(p, encoding="utf-8").read()
-        idx = text.find("\n## ")                      # выкинуть индивидуальный H1
-        blocks.append(text[idx + 1:] if idx != -1 else text)
-    if not blocks:
-        print("PoC: успешных атак в этом прогоне не зафиксировано.")
-        return
-    out = os.path.join(OUTPUT_DIR, "PROOF.md")
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(out, "w", encoding="utf-8") as f:
-        f.write("# PoC успешных атак — сводный отчёт\n\n")
-        f.write("Воспроизводится руками. ВВОД (канал) -> ОТВЕТ системы -> РЕЗУЛЬТАТ.\n\n")
-        f.write("Каналы: **[ЧАТ]** агенту, **[REST]** прямой HTTP к данным, "
-                "**[ЧАТ+ПАМЯТЬ]** диалог + finalize.\n\n")
-        f.write("\n".join(blocks))
-    print(f"Сводный PoC всех воздействий -> {out}")
-
-
 def _stamp():
     """Читаемая метка даты-времени для папки прогона: <task>-2026-09-04_19-35-46."""
     import time
@@ -432,7 +407,7 @@ def main(argv=None):
         cmd_bac(cfg, args.attempts)          # сам пишет единый proof.md -> output/PROOF.md
         return 0
     if args.cmd == "poison":
-        _assemble_proof([cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)])
+        cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)  # сам пишет output/POISON_PROOF.md
         return 0
     if args.cmd == "bac-proof":
         return cmd_bac_proof(cfg, run_id=args.run)
@@ -444,7 +419,7 @@ def main(argv=None):
         cmd_models(cfg, n_gen=args.attempts)
         return 0
     if args.cmd == "chain":
-        _assemble_proof([cmd_chain(cfg, args.attempts)])
+        cmd_chain(cfg, args.attempts)
         return 0
     if args.cmd == "repro":
         cmd_repro(cfg)
@@ -453,9 +428,8 @@ def main(argv=None):
         cmd_mem(cfg, marker=args.marker)
         return 0
     if args.cmd == "all":
-        rb = cmd_bac(cfg, args.attempts)
-        rp = cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)
-        _assemble_proof([rb, rp])
+        cmd_bac(cfg, args.attempts)          # -> output/PROOF.md
+        cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)  # -> output/POISON_PROOF.md
         return 0
 
 
