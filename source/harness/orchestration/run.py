@@ -19,6 +19,7 @@ from ..core import provisioning, isolation
 from ..oracle import state
 from ..report import findings as F
 from ..report import coverage as COV
+from ..report import poison_proof
 from ..report.stats import summarize_rate
 
 
@@ -179,9 +180,49 @@ def cmd_poison(cfg, attempts, use_llm):
     doc = F.write(run, fs, _meta(cfg))
     COV.write(run)
     _proof_note(run)
+    pp = poison_proof.build(run.dir)
+    if pp:
+        _publish_poison_proof(pp)
+        print(f"Пруф воздействия (реконструкция запросов из логов) -> {pp}")
     print(f"findings: {doc['count']} -> {run.path('findings.json')}")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return run
+
+
+def cmd_poison_proof(cfg, run_id=None):
+    """Собрать человекочитаемый пруф отравления из логов прогона (по умолчанию — последнего)."""
+    runs_dir = os.path.join(OUTPUT_DIR, "runs")
+    if run_id:
+        run_dir = run_id if os.path.isdir(run_id) else os.path.join(runs_dir, run_id)
+    else:
+        cands = [os.path.join(runs_dir, d) for d in os.listdir(runs_dir)
+                 if d.startswith("poison-") and
+                 os.path.exists(os.path.join(runs_dir, d, "attempts.jsonl"))]
+        if not cands:
+            print("poison-proof: не найдено ни одного poison-прогона с логами.")
+            return 1
+        # по времени прогона = mtime attempts.jsonl (не папки: её сдвигает запись отчёта)
+        run_dir = max(cands, key=lambda d: os.path.getmtime(os.path.join(d, "attempts.jsonl")))
+    if not os.path.exists(os.path.join(run_dir, "attempts.jsonl")):
+        print(f"poison-proof: нет attempts.jsonl в {run_dir}")
+        return 1
+    pp = poison_proof.build(run_dir)
+    if pp:
+        top = _publish_poison_proof(pp)
+        print(f"Пруф воздействия (отравление памяти) -> {pp}")
+        print(f"Верхнеуровневая копия (последняя) -> {top}")
+        return 0
+    print(f"poison-proof: в {os.path.basename(run_dir)} нет попыток отравления.")
+    return 1
+
+
+def _publish_poison_proof(pp_path):
+    """Скопировать свежесобранный poison_proof.md в стабильный output/POISON_PROOF.md."""
+    top = os.path.join(OUTPUT_DIR, "POISON_PROOF.md")
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    with open(pp_path, encoding="utf-8") as src, open(top, "w", encoding="utf-8") as dst:
+        dst.write(src.read())
+    return top
 
 
 def cmd_chain(cfg, attempts):
@@ -333,10 +374,13 @@ def main(argv=None):
     _load_env()
     cfg = load()
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["smoke", "bac", "poison", "models", "chain", "repro", "mem", "all"])
+    ap.add_argument("cmd", choices=["smoke", "bac", "poison", "poison-proof", "models",
+                                    "chain", "repro", "mem", "all"])
     ap.add_argument("--attempts", type=int, default=5)
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--marker", default=None, help="mem: искать эту метку по ярусам памяти")
+    ap.add_argument("--run", default=None,
+                    help="poison-proof: id/путь прогона (по умолчанию последний poison-*)")
     args = ap.parse_args(argv)
 
     if args.cmd == "smoke":
@@ -347,6 +391,8 @@ def main(argv=None):
     if args.cmd == "poison":
         _assemble_proof([cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)])
         return 0
+    if args.cmd == "poison-proof":
+        return cmd_poison_proof(cfg, run_id=args.run)
     if args.cmd == "models":
         cmd_models(cfg, n_gen=args.attempts)
         return 0

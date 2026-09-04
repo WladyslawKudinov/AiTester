@@ -2,7 +2,7 @@
 """Точка входа проекта (source-layout).
 
 Запуск из корня:  ./.venv/bin/python run.py <cmd> [--attempts N] [--no-llm] [--marker X]
-Команды: smoke | bac | poison | chain | models | mem | repro | all
+Команды: smoke | bac | poison | poison-proof | chain | models | mem | repro | all
 
 Кладёт source/ в путь импорта и передаёт управление CLI харнесса (source/harness/orchestration/run.py).
 Код — в source/, документация — в docs/, прогоны и артефакты — в output/.
