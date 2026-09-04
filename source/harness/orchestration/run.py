@@ -20,6 +20,7 @@ from ..oracle import state
 from ..report import findings as F
 from ..report import coverage as COV
 from ..report import poison_proof
+from ..report import bac_proof
 from ..report import llm_repro
 from ..report.stats import summarize_rate
 
@@ -121,9 +122,39 @@ def cmd_bac(cfg, attempts):
     doc = F.write(run, fs, _meta(cfg))
     COV.write(run)
     _proof_note(run)
+    bp = bac_proof.build(run.dir)
+    if bp:
+        top = os.path.join(OUTPUT_DIR, "BAC_PROOF.md")
+        with open(bp, encoding="utf-8") as s, open(top, "w", encoding="utf-8") as t:
+            t.write(s.read())
+        print(f"Первичные запросы к агенту (все, с вердиктом утечки) -> {bp}")
     print(f"findings: {doc['count']} -> {run.path('findings.json')}")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return run
+
+
+def cmd_bac_proof(cfg, run_id=None):
+    """Собрать BAC-отчёт с первичными запросами из логов прогона (по умолчанию — последний bac-)."""
+    runs_dir = os.path.join(OUTPUT_DIR, "runs")
+    if run_id:
+        run_dir = run_id if os.path.isdir(run_id) else os.path.join(runs_dir, run_id)
+    else:
+        cands = [os.path.join(runs_dir, d) for d in os.listdir(runs_dir)
+                 if d.startswith("bac-") and os.path.exists(os.path.join(runs_dir, d, "attempts.jsonl"))]
+        if not cands:
+            print("bac-proof: не найдено ни одного bac-прогона с логами.")
+            return 1
+        run_dir = max(cands, key=lambda d: os.path.getmtime(os.path.join(d, "attempts.jsonl")))
+    bp = bac_proof.build(run_dir)
+    if bp:
+        top = os.path.join(OUTPUT_DIR, "BAC_PROOF.md")
+        with open(bp, encoding="utf-8") as s, open(top, "w", encoding="utf-8") as t:
+            t.write(s.read())
+        print(f"Первичные запросы к агенту (все) -> {bp}")
+        print(f"Верхнеуровневая копия -> {top}")
+        return 0
+    print(f"bac-proof: в {os.path.basename(run_dir)} нет BAC-попыток.")
+    return 1
 
 
 # =====================================================================================
@@ -386,8 +417,8 @@ def main(argv=None):
     _load_env()
     cfg = load()
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["smoke", "bac", "poison", "poison-proof", "llm-repro",
-                                    "models", "chain", "repro", "mem", "all"])
+    ap.add_argument("cmd", choices=["smoke", "bac", "bac-proof", "poison", "poison-proof",
+                                    "llm-repro", "models", "chain", "repro", "mem", "all"])
     ap.add_argument("--attempts", type=int, default=5)
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--marker", default=None, help="mem: искать эту метку по ярусам памяти")
@@ -403,6 +434,8 @@ def main(argv=None):
     if args.cmd == "poison":
         _assemble_proof([cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)])
         return 0
+    if args.cmd == "bac-proof":
+        return cmd_bac_proof(cfg, run_id=args.run)
     if args.cmd == "poison-proof":
         return cmd_poison_proof(cfg, run_id=args.run)
     if args.cmd == "llm-repro":
