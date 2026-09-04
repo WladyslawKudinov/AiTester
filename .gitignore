@@ -1,0 +1,8 @@
+.env
+.venv/
+**/fixtures/keys.json
+customer_info.md
+docs/*.pdf
+harness/runs/
+__pycache__/
+*.pyc

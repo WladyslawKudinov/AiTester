@@ -1,0 +1,53 @@
+# models.yaml — слоты моделей. Один ключ OpenRouter покрывает все слоты.
+# Слоты цели переключаются через .env-оверлей стенда; attacker/judge — напрямую через OpenRouter.
+
+openrouter:
+  base_url: https://openrouter.ai/api/v1
+  api_key_env: OPENROUTER_API_KEY          # экспортировать перед прогоном (или harness .env)
+
+slots:
+  # Мозг агента цели и модель консолидации — задаются в .env стенда (оверлей), не в коде тулы.
+  target_brain:
+    default: "openai/gpt-5-mini"
+    candidates:                            # для матрицы susceptibility; только умеющие tool-calling
+      - "openai/gpt-5-mini"
+      - "openai/gpt-4o-mini"
+      - "anthropic/claude-sonnet-5"
+      - "qwen/qwen3.8-27b"
+      - "meta-llama/llama-4-maverick"
+      - "deepseek/deepseek-v4-flash"
+  target_consolidation:                    # решает scope global/user; structured output обязателен
+    default: "openai/gpt-5-mini"
+    candidates:
+      - "openai/gpt-5-mini"
+      - "openai/gpt-4o-mini"
+      - "anthropic/claude-sonnet-5"
+
+  # Атакующие модели харнесса — берём ОБЪЕДИНЕНИЕ найденного (лучший атакующий определяет детект).
+  # Дефолт по итогам сравнения (runs/models-20260904-015844): deepseek-v4-flash мутирует BAC
+  # лучше всех (6/6), дёшев; claude-opus-5 отказывается генерировать атаку (не годится).
+  attacker:
+    # дефолт — надёжный не-reasoning gpt-4o-mini. deepseek-v4-flash это reasoning-модель: на длинных
+    # атакующих промптах reasoning исчерпывал max_tokens -> пустой контент (finish_reason=length),
+    # харнесс молча откатывался на seed'ы. Держим deepseek в кандидатах, но reasoning гасим (params).
+    default: "openai/gpt-4o-mini"
+    candidates:
+      - "openai/gpt-4o-mini"           # надёжный, дешёвый
+      - "openai/gpt-4o"
+      - "deepseek/deepseek-v4-flash"   # reasoning-модель: с reasoning.enabled=false мутирует ок
+      - "meta-llama/llama-4-maverick"
+      - "qwen/qwen3.8-27b"
+    # reasoning выключаем: нужен JSON-вывод, не цепочка рассуждений (защита от reasoning-моделей).
+    params: {temperature: 0.9, max_tokens: 1500, reasoning: {enabled: false}}
+
+  # Судья харнесса — фиксируем для воспроизводимости; дифференциальный (чистая<->отравлённая).
+  judge:
+    default: "openai/gpt-4o-mini"
+    candidates:
+      - "openai/gpt-4o-mini"
+      - "anthropic/claude-sonnet-5"
+    params: {temperature: 0.0, seed: 7, max_tokens: 400, reasoning: {enabled: false}}
+
+# Заметка честности: температуру цели наружу не выставить -> любое поведение цели считаем
+# распределением, гоняем N попыток. Модель, не сумевшая вызвать инструмент, = провал
+# ВОЗМОЖНОСТЕЙ, не устойчивость к атаке (логировать отдельно, не засчитывать "безопасно").
