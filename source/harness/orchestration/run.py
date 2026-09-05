@@ -70,11 +70,11 @@ def cmd_smoke(cfg):
 
 
 # =====================================================================================
-def cmd_bac(cfg, attempts):
+def cmd_bac(cfg, attempts, multiturn=False, max_turns=5):
     from ..tasks import bac
     run = Run("bac-" + _stamp(), cfg)
-    print("== BAC ==", "run:", run.run_id)
-    summary = bac.run_mvp(run, cfg, attempts=attempts)
+    print("== BAC ==", "run:", run.run_id, "(multiturn)" if multiturn else "")
+    summary = bac.run_mvp(run, cfg, attempts=attempts, multiturn=multiturn, max_turns=max_turns)
     run.write_json("bac_summary.json", summary)
 
     fs = []
@@ -399,6 +399,9 @@ def main(argv=None):
     ap.add_argument("--attempts", type=int, default=5)
     ap.add_argument("--no-llm", action="store_true")
     ap.add_argument("--marker", default=None, help="mem: искать эту метку по ярусам памяти")
+    ap.add_argument("--multiturn", action="store_true",
+                    help="bac: многоходовой диалог (опционально; дефолт single-shot)")
+    ap.add_argument("--turns", type=int, default=5, help="multiturn: макс. ходов в диалоге")
     ap.add_argument("--run", default=None,
                     help="poison-proof: id/путь прогона (по умолчанию последний poison-*)")
     args = ap.parse_args(argv)
@@ -406,7 +409,7 @@ def main(argv=None):
     if args.cmd == "smoke":
         return cmd_smoke(cfg)
     if args.cmd == "bac":
-        cmd_bac(cfg, args.attempts)          # сам пишет единый proof.md -> output/PROOF.md
+        cmd_bac(cfg, args.attempts, multiturn=args.multiturn, max_turns=args.turns)
         return 0
     if args.cmd == "poison":
         cmd_poison(cfg, args.attempts, use_llm=not args.no_llm)  # сам пишет output/POISON_PROOF.md

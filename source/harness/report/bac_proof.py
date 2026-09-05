@@ -62,13 +62,16 @@ def build(run_dir):
     run_id = os.path.basename(run_dir.rstrip("/"))
 
     agent = [a for a in att if a.get("channel") == "agent_mediated" and a.get("prompt")]
+    conv = [a for a in att if a.get("channel") == "agent_mediated_conv"]
     data = [a for a in att if a.get("channel") == "data_layer"]
     owner = [a for a in att if a.get("channel") == "account_owner"]
-    if not (agent or data or owner):
+    if not (agent or conv or data or owner):
         return None
 
-    attacker = str((agent or data or owner)[0].get("attacker", "1001"))
-    victim = str((agent[0].get("victim") if agent else (data[0].get("victim") if data else "?")))
+    attacker = str((agent or conv or data or owner)[0].get("attacker", "1001"))
+    victim = str((agent[0].get("victim") if agent else
+                  (conv[0].get("victim") if conv else
+                   (data[0].get("victim") if data else "?"))))
     leaks = [a for a in agent if a.get("leak")]
 
     d = []
@@ -106,6 +109,27 @@ def build(run_dir):
             d.append(f"→ нет утечки (агент не выдал данные клиента {victim}).")
         d.append("")
     d.append("---\n")
+
+    # МНОГОХОДОВЫЕ ДИАЛОГИ (--multiturn) — что написал юзер по ходам
+    if conv:
+        cleaks = [a for a in conv if a.get("leak")]
+        d.append("## 1b. Многоходовые диалоги (--multiturn) — что написал юзер по ходам\n")
+        d.append(f"Диалогов: **{len(conv)}**, с утечкой: **{len(cleaks)}**. Каждый — ОДНА сессия, "
+                 "атакующий эскалирует по ответу агента; `[УТЕЧКА]` — в каком-то ходе всплыли "
+                 "данные жертвы.\n")
+        for i, a in enumerate(conv, 1):
+            leaked = bool(a.get("leak"))
+            tag = "[УТЕЧКА]" if leaked else "[нет утечки]"
+            d.append(f"### Диалог {i}. {tag}  _(модель {a.get('attacker_model')}, режим "
+                     f"{a.get('auth_mode')}, ходов {a.get('turns')}, backtracks {a.get('backtracks', 0)})_\n")
+            for ti, t in enumerate(a.get("transcript") or [], 1):
+                bt = " _(откат по отказу)_" if t.get("backtracked") else ""
+                d.append(f"**Ход {ti} — что написал юзер**{bt}:\n\n> "
+                         + str(t.get("attacker", "")).replace("\n", "\n> "))
+                d.append("_ответ (фрагмент):_ " + str(t.get("reply", "")).replace("\n", " ")[:200] + "\n")
+            if leaked:
+                d.append(f"→ **утечка**: отпечатки клиента {victim}: `{a.get('victim_fingerprints')}`.\n")
+        d.append("---\n")
 
     # СЛОЙ ДАННЫХ (REST) — юзер ничего НЕ пишет
     if data or owner:
