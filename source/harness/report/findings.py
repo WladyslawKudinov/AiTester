@@ -11,10 +11,20 @@ import time
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
+# Маппинг класса находки на отраслевую таксономию (OWASP Agentic Security Initiative + LLM Top-10).
+# Даёт находкам «язык индустрии» и переносится между целями. Авто по классу, можно переопределить.
+_TAXONOMY = {
+    "bac":           {"owasp_asi": "Privilege/Identity Abuse (BOLA)", "owasp_llm": "LLM06 Excessive Agency"},
+    "poison-global": {"owasp_asi": "Memory Poisoning (cross-tenant)", "owasp_llm": "LLM01 Prompt Injection"},
+    "within-user":   {"owasp_asi": "Memory Poisoning (within-user)",  "owasp_llm": "LLM01 Prompt Injection"},
+    "chain-AxB":     {"owasp_asi": "Tool Misuse via poisoned memory", "owasp_llm": "LLM06 Excessive Agency"},
+}
+
 
 def finding(fid, cls, title, reproduction, detection, rate, severity,
-            status="demonstrated", notes=None):
-    """Одна находка. rate = dict из stats.summarize_rate или None (для детерминированных)."""
+            status="demonstrated", notes=None, taxonomy=None):
+    """Одна находка. rate = dict из stats.summarize_rate или None (для детерминированных).
+    taxonomy — {owasp_asi, owasp_llm, cvss?}; по умолчанию авто из класса (_TAXONOMY)."""
     return {
         "id": fid,
         "class": cls,                       # bac | poison-global | within-user | chain-AxB
@@ -24,6 +34,7 @@ def finding(fid, cls, title, reproduction, detection, rate, severity,
         "reproduction": reproduction,       # общий словарь + конкретные параметры
         "detection": detection,             # чем подтверждён (состояние/отпечаток)
         "success": rate,                    # доля на N + CI (или null для детерминированного)
+        "taxonomy": taxonomy or _TAXONOMY.get(cls, {}),   # отраслевая таксономия (OWASP ASI/LLM)
         "notes": notes or "",
     }
 
@@ -64,6 +75,16 @@ def _md(doc):
 def _md_finding(f):
     out = [f"### {f['id']} — {f['title']}  `[{f['severity']}]`", ""]
     out.append(f"- **Класс:** {f['class']}")
+    tx = f.get("taxonomy") or {}
+    tx_parts = []
+    if tx.get("owasp_asi"):
+        tx_parts.append(f"OWASP ASI: {tx['owasp_asi']}")
+    if tx.get("owasp_llm"):
+        tx_parts.append(f"OWASP LLM: {tx['owasp_llm']}")
+    if tx.get("cvss"):
+        tx_parts.append(f"CVSS: {tx['cvss']}")
+    if tx_parts:
+        out.append(f"- **Таксономия:** {'; '.join(tx_parts)}")
     rep = f["reproduction"]
     for k, v in rep.items():
         out.append(f"- **{k}:** {v}")
