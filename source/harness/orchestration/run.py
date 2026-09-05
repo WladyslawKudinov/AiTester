@@ -456,7 +456,8 @@ def cmd_list(cfg):
     for name in sorted(reg):
         cls = reg[name]
         st = "state-mutating" if getattr(cls, "mutates_state", False) else "read-only"
-        print(f"\n  a-{name}  — {getattr(cls, 'title', '') or name}  [{st}]")
+        act = "" if getattr(cls, "active", True) else "  (не в a-all)"
+        print(f"\n  a-{name}  — {getattr(cls, 'title', '') or name}  [{st}]{act}")
         tx = getattr(cls, "taxonomy", {}) or {}
         if tx.get("owasp_asi") or tx.get("owasp_llm"):
             print(f"     таксономия: ASI {tx.get('owasp_asi', '-')} · LLM {tx.get('owasp_llm', '-')}")
@@ -571,7 +572,7 @@ def cmd_vectors(cfg, selected, overrides):
         print("векторы не найдены (attack_vectors/ пуст)")
         return 1
     if "*" in selected:
-        names = sorted(reg)
+        names = [n for n in sorted(reg) if getattr(reg[n], "active", True)]   # a-all -> только активные
     else:
         names = [n for n in selected if n in reg]
         unknown = [n for n in selected if n not in reg]

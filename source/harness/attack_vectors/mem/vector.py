@@ -19,6 +19,7 @@ from ..base import AttackVector
 class MemVector(AttackVector):
     name = "mem"
     title = "Отравление памяти (E1..E4, cross-tenant + within-user)"
+    active = False                             # пока убран из a-all (см. docinject); зовётся явно a-mem
     mutates_state = True                       # пишет в память -> нужен lease + сброс
     taxonomy = {"owasp_asi": "Memory Poisoning (cross-tenant)",
                 "owasp_llm": "LLM01 Prompt Injection"}

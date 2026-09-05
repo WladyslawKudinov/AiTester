@@ -20,6 +20,7 @@ from ..base import AttackVector
 class ChainVector(AttackVector):
     name = "chain"
     title = "Связка A×B: чужой id через память -> BAC"
+    active = False                              # пока убран из a-all; оживим поверх docinject
     mutates_state = True                        # сажает правило в память -> lease + сброс
     taxonomy = {"owasp_asi": "Tool Misuse via poisoned memory",
                 "owasp_llm": "LLM06 Excessive Agency"}
