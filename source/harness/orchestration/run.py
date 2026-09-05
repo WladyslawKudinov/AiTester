@@ -9,9 +9,12 @@
 """
 
 import argparse
+import contextlib
 import json
 import os
+import re
 import sys
+import traceback
 
 from ..core.config import load, PROJECT_ROOT, OUTPUT_DIR
 from ..core.runlog import Run
@@ -22,7 +25,10 @@ from ..report import coverage as COV
 from ..report import poison_proof
 from ..report import bac_proof
 from ..report import llm_repro
+from ..report import report_std
 from ..report.stats import summarize_rate
+from ..attack_vectors import discover, merge_params
+from ..attack_vectors.base import VectorContext
 
 
 def _load_env():
@@ -410,9 +416,195 @@ def _stamp():
     return time.strftime("%Y-%m-%d_%H-%M-%S")
 
 
+# =====================================================================================
+# Модульные векторы: грамматика a-<vector> / a-all / <vector>--<key>=<value> / --list
+# =====================================================================================
+_A_SEL = re.compile(r"^a-(.+)$")                 # выбор атаки: a-bac, a-all
+_OVR = re.compile(r"^([A-Za-z0-9_]+)--(.+)$")    # override: bac--max_turns=6
+
+
+def _split_vector_args(argv):
+    """Разбор новой грамматики. -> (selected|None, overrides, rest, list_mode).
+    selected=None, если не было ни одного a-* (тогда старый argparse-путь для back-compat).
+    a-all -> ['*']. overrides={vector:{key:val}}; 'vec--flag' без '=' -> True."""
+    selected, overrides, rest, list_mode, saw = [], {}, [], False, False
+    for tok in argv:
+        if tok in ("--list", "--list-vectors"):
+            list_mode = True
+            continue
+        m = _A_SEL.match(tok)
+        if m:
+            saw = True
+            selected.append("*" if m.group(1) == "all" else m.group(1))
+            continue
+        m = _OVR.match(tok)
+        if m:
+            k, sep, v = m.group(2).partition("=")
+            overrides.setdefault(m.group(1), {})[k] = v if sep else True
+            continue
+        rest.append(tok)
+    return (selected if saw else None), overrides, rest, list_mode
+
+
+def cmd_list(cfg):
+    """Печать реестра обнаруженных векторов + схемы их параметров (ноль регистрации)."""
+    reg = discover()
+    if not reg:
+        print("векторы не найдены (attack_vectors/ пуст)")
+        return 0
+    print(f"== Векторы атак ({len(reg)}) ==")
+    for name in sorted(reg):
+        cls = reg[name]
+        st = "state-mutating" if getattr(cls, "mutates_state", False) else "read-only"
+        print(f"\n  a-{name}  — {getattr(cls, 'title', '') or name}  [{st}]")
+        tx = getattr(cls, "taxonomy", {}) or {}
+        if tx.get("owasp_asi") or tx.get("owasp_llm"):
+            print(f"     таксономия: ASI {tx.get('owasp_asi', '-')} · LLM {tx.get('owasp_llm', '-')}")
+        for k, spec in (getattr(cls, "_param_schema", {}) or {}).items():
+            desc = spec.get("description", "")
+            print(f"     {name}--{k}={spec.get('default')}   {('# ' + desc) if desc else ''}")
+    print("\nЗапуск: a-<name> [a-<name> ...] | a-all   ·   override: <name>--<key>=<value>")
+    return 0
+
+
+_TOP_PROOF = {"bac": "PROOF.md", "mem": "POISON_PROOF.md"}   # вектор -> верхнеуровневый PoC
+
+
+def _publish_top(name, run):
+    """Скопировать proof.md вектора в стабильный output/<TOP>.md (как раньше для bac/poison)."""
+    top = _TOP_PROOF.get(name)
+    src = run.path("proof.md")
+    if not top or not os.path.exists(src):
+        return
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    dst = os.path.join(OUTPUT_DIR, top)
+    with open(src, encoding="utf-8") as s, open(dst, "w", encoding="utf-8") as t:
+        t.write(s.read())
+    print(f"    сводный PoC -> {dst}")
+
+
+def _error_finding(name, phase, exc, tb=None):
+    """Находка о падении вектора (failsafe): в отчёт попадает как outcome=error, не как «безопасно»."""
+    return F.finding(
+        f"F-{name.upper()}-ERROR", name, f"Вектор '{name}' упал на фазе '{phase}'",
+        {"channel": "orchestrator failsafe", "phase": phase, "call": f"{name}.{phase}()"},
+        f"исключение: {type(exc).__name__}: {str(exc)[:200]}",
+        None, "info", status="error",
+        notes=(("трейс: " + tb[-400:]) if tb else "Вектор не завершился; см. лог прогона."),
+        taxonomy={"owasp_asi": "N/A (harness error)", "owasp_llm": "N/A (harness error)"})
+
+
+def _run_one_vector(cfg, run, name, cls, overrides):
+    """Полный жизненный цикл ОДНОГО вектора ПОД ЗАЩИТОЙ. Никогда не бросает — падение вектора не
+    роняет оркестратор: пишем error-находку + отчёт и идём дальше. -> list[finding]."""
+    try:
+        params = merge_params(cls, overrides.get(name, {}))
+    except Exception as e:
+        print(f"  [{name}] параметры не собрались ({type(e).__name__}: {e}) — беру дефолты")
+        params = dict(getattr(cls, "_param_defaults", {}) or {})
+    try:
+        vec = cls(params=params)
+    except Exception as e:
+        print(f"  [{name}] init упал: {type(e).__name__}: {e}")
+        return [_error_finding(name, "init", e, traceback.format_exc())]
+
+    ctx = VectorContext(run=run, cfg=cfg, params=params)
+    try:
+        if not vec.applicable(ctx):
+            print(f"  [{name}] неприменим к цели (applicable=False) — пропуск")
+            return []
+    except Exception as e:
+        print(f"  [{name}] applicable упал: {type(e).__name__}: {e}")
+        return [_error_finding(name, "applicable", e, traceback.format_exc())]
+
+    print(f"  [{name}] запуск (mutates_state={getattr(vec, 'mutates_state', False)}) params={params}")
+    summary, fs = None, []
+    try:
+        try:
+            vec.setup(ctx)
+        except Exception as e:
+            print(f"  [{name}] setup упал (продолжаю): {type(e).__name__}: {e}")
+        cm = isolation.stand_lease(cfg) if getattr(vec, "mutates_state", False) else contextlib.nullcontext()
+        with cm:
+            summary = vec.run(ctx)
+    except Exception as e:
+        print(f"  [{name}] RUN упал: {type(e).__name__}: {e}")
+        fs = [_error_finding(name, "run", e, traceback.format_exc())]
+    finally:
+        try:
+            vec.teardown(ctx)
+        except Exception as e:
+            print(f"  [{name}] teardown упал: {type(e).__name__}: {e}")
+
+    if summary is not None:
+        try:
+            run.write_json(f"{name}_summary.json", summary)
+        except Exception as e:
+            print(f"  [{name}] summary не записался: {type(e).__name__}: {e}")
+        try:
+            fs = list(vec.findings(summary, ctx))
+        except Exception as e:
+            print(f"  [{name}] findings упал: {type(e).__name__}: {e}")
+            fs = [_error_finding(name, "findings", e, traceback.format_exc())]
+
+    try:
+        jp, mp = report_std.write(run, vec, summary or {"vector": name, "error": True}, fs, cfg)
+        print(f"    -> {os.path.basename(jp)}, {os.path.basename(mp)}  (находок: {len(fs)})")
+    except Exception as e:
+        print(f"  [{name}] отчёт report__{name} не записался: {type(e).__name__}: {e}")
+    try:
+        _publish_top(name, run)
+    except Exception as e:
+        print(f"  [{name}] публикация PoC не удалась: {type(e).__name__}: {e}")
+    return fs
+
+
+def cmd_vectors(cfg, selected, overrides):
+    """Generic-драйвер: единый жизненный цикл для всех выбранных векторов (заменяет if/elif).
+    Максимальный failsafe: сбой одного вектора не трогает остальные и не роняет оркестратор."""
+    try:
+        reg = discover()
+    except Exception as e:
+        print(f"discover() упал: {type(e).__name__}: {e}")
+        return 1
+    if not reg:
+        print("векторы не найдены (attack_vectors/ пуст)")
+        return 1
+    if "*" in selected:
+        names = sorted(reg)
+    else:
+        names = [n for n in selected if n in reg]
+        unknown = [n for n in selected if n not in reg]
+        if unknown:
+            print(f"неизвестные векторы: {', '.join(unknown)} ; доступны: {', '.join(sorted(reg))}")
+            if not names:
+                return 1
+    run = Run("run-" + _stamp(), cfg)
+    print("== VECTORS ==", "run:", run.run_id, "|", ", ".join(names))
+    all_findings = []
+    for name in names:
+        all_findings += _run_one_vector(cfg, run, name, reg[name], overrides)   # не бросает
+    try:
+        doc = F.write(run, all_findings, _meta(cfg))
+        print(f"findings всего: {doc['count']} -> {run.path('findings.json')}")
+    except Exception as e:
+        print(f"свод findings не записался: {type(e).__name__}: {e}")
+    try:
+        COV.write(run)
+    except Exception as e:
+        print(f"coverage не записался: {type(e).__name__}: {e}")
+    return 0
+
+
 def main(argv=None):
     _load_env()
     cfg = load()
+    argv = list(sys.argv[1:] if argv is None else argv)
+    selected, overrides, rest, list_mode = _split_vector_args(argv)
+    if list_mode:
+        return cmd_list(cfg)
+    if selected is not None:                      # была грамматика a-* -> generic-драйвер
+        return cmd_vectors(cfg, selected, overrides)
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["smoke", "bac", "bac-proof", "poison", "poison-proof",
                                     "llm-repro", "models", "chain", "repro", "mem", "all"])

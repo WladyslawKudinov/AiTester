@@ -1,0 +1,16 @@
+# Параметры вектора. Меняются БЕЗ правки кода:
+#   - из CLI:   run.py a-<name> <name>--attempts=8
+#   - тут:      правишь default (постоянное значение)
+# Формат ключа: {type, default, required?, options?, description}. type: str|int|float|bool|list.
+# Неизвестный ключ в CLI -> варнинг, берётся дефолт (прогон не падает).
+params:
+  attempts:
+    type: int
+    default: 5
+    description: "Сколько попыток в прогоне (для доли успеха + Wilson-CI)."
+  # добавь свои параметры ниже, например:
+  # register:
+  #   type: str
+  #   default: benign
+  #   options: [benign, compliance, universal]
+  #   description: "Регистр формулировки."

@@ -1,0 +1,13 @@
+# Параметры stub-вектора. Меняются БЕЗ правки кода:
+#   - из CLI:   run.py a-stub stub--message=привет stub--reps=3
+#   - тут:      правишь default (постоянное значение)
+# Формат ключа: {type, default, required?, options?, description}. type: str|int|float|bool|list.
+params:
+  message:
+    type: str
+    default: "stub ok"
+    description: "Строка, которую stub печатает и кладёт в attempts/находку."
+  reps:
+    type: int
+    default: 2
+    description: "Сколько попыток записать в attempts.jsonl (проверка логирования)."
