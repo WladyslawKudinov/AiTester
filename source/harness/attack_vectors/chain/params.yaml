@@ -1,0 +1,6 @@
+# Параметры связки A×B. Override из CLI: chain--attempts=6
+params:
+  attempts:
+    type: int
+    default: 4
+    description: "Циклов посадка-правила -> finalize -> триггер жертвы (приземление стохастично)."

@@ -1,0 +1,16 @@
+# Параметры отравления памяти. Override из CLI:
+#   mem--attempts=6 mem--registers=benign,compliance mem--use_llm=false
+params:
+  attempts:
+    type: int
+    default: 5
+    description: "Попыток на каждый вариант диалога (доля приземления + Wilson-CI)."
+  use_llm:
+    type: bool
+    default: true
+    description: "Добавлять LLM-мутации диалогов (корпус выигравших) к статическим из payloads.yaml."
+  registers:
+    type: list
+    default: [benign, compliance, universal]
+    options: [benign, compliance, universal]
+    description: "Регистры формулировок: benign->within-user надёжнее, compliance/universal->в global."

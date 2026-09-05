@@ -1,0 +1,14 @@
+# Параметры BAC. Override из CLI: bac--attempts=8 bac--multiturn=true bac--max_turns=6
+params:
+  attempts:
+    type: int
+    default: 5
+    description: "Число LLM-генераций формулировок в агент-канале (доля успеха + Wilson-CI)."
+  multiturn:
+    type: bool
+    default: false
+    description: "Агент-канал ведёт многоходовой диалог (GOAT/Crescendo). Дефолт single-shot."
+  max_turns:
+    type: int
+    default: 5
+    description: "multiturn: макс. ходов в диалоге."
