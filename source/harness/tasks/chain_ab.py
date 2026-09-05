@@ -72,7 +72,7 @@ def run_chain(run, cfg=None, attempts=4):
     victim = str(h["victims"][0])
     foreign_account = cfg.by_cus(cfg.victim_default())["account_id"]  # чужой счёт (жертва по умолчанию)
     client = AgentClient(run.dir, cfg)
-    isolation.purge_all_canaries(cfg)
+    isolation.prepare_reset(cfg)   # точечно (полный вайп — только по конфигу); chain меняет состояние
     plant = cfg.payloads["chain"]["plant_foreign_id"][0]["turns"]
     leaks = 0
     landed = 0

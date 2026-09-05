@@ -178,9 +178,9 @@ def run_mvp(run, cfg=None, attempts=5):
     key = provisioning.ensure_key(attacker, cfg)
     client = AgentClient(run.dir, cfg)
 
-    # изоляция: убрать канарейки прошлых прогонов (чтобы память не гнула агент-канал)
-    log(f"BAC {attacker}->{victim}: очистка канареек, старт")
-    isolation.purge_all_canaries(cfg)
+    # BAC — read-only (data-layer/owner/agent-read): персистентное состояние стенда НЕ меняем,
+    # поэтому сброс НЕ делаем (иначе бьём чужой стейт). mutates_state('bac') == False.
+    log(f"BAC {attacker}->{victim}: старт (read-only, без сброса состояния)")
     summary = {"attacker": attacker, "victim": victim, "channels": {}}
 
     # Канал 1 — data layer (детерминированно), пара режимов

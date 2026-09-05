@@ -162,7 +162,8 @@ def cmd_poison(cfg, attempts, use_llm):
     from ..tasks import memory_poison as mp
     run = Run("poison-" + _stamp(), cfg)
     print("== POISON ==", "run:", run.run_id)
-    summary = mp.run_mvp(run, cfg, attempts=attempts, use_llm=use_llm)
+    with isolation.stand_lease(cfg):       # state-меняющий вектор -> сериализуем доступ к стенду
+        summary = mp.run_mvp(run, cfg, attempts=attempts, use_llm=use_llm)
     run.write_json("poison_summary.json", summary)
 
     # агрегируем по всем вариантам payload: сколько приземлений global/user, E3/E4
@@ -271,7 +272,8 @@ def cmd_chain(cfg, attempts):
     from ..tasks import chain_ab
     run = Run("chain-" + _stamp(), cfg)
     print("== CHAIN A×B ==", "run:", run.run_id)
-    summary = chain_ab.run_chain(run, cfg, attempts=attempts)
+    with isolation.stand_lease(cfg):       # state-меняющий вектор -> сериализуем доступ к стенду
+        summary = chain_ab.run_chain(run, cfg, attempts=attempts)
     run.write_json("chain_summary.json", summary)
     rate = summarize_rate(summary["bac_leaks"], summary["attempts"])
     fs = [F.finding(

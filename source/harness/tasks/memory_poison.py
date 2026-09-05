@@ -151,7 +151,7 @@ def landing_sweep(run, client, judge, dialog_specs, marker_fn, attacker_cus, vic
         turns = spec["turns"]
         register = spec.get("register", "?")
         log(f"payload {di + 1}/{len(dialog_specs)} [{register}]: {attempts_per_dialog} попыток")
-        isolation.reset_memory(cfg)
+        isolation.prepare_reset(cfg)   # точечно между пейлоадами (полный вайп — только по конфигу)
         e1_hits = e2_hits = e3_hits = e4_hits = 0
         scopes = {"global": 0, "user": 0, "both": 0, "none": 0}
         for a in range(attempts_per_dialog):
@@ -202,10 +202,11 @@ def run_mvp(run, cfg=None, attempts=4, use_llm=True, registers=("benign", "compl
     client = AgentClient(run.dir, cfg)
     judge = Judge(run.dir, cfg)
 
-    # чистый прогон: сброс накопленной памяти -> незагрязнённый baseline и контроль
-    log(f"POISON {attacker}->{victim}: сброс памяти, снимаю контрольный ответ")
-    reset = isolation.reset_memory(cfg)
-    run.attempt({"task": "memory_poison", "event": "reset_memory", "removed": reset})
+    # подготовка состояния: по умолчанию ТОЧЕЧНАЯ чистка канареек (не бьём со-арендаторов);
+    # полный вайп — только reset.full_wipe в конфиге. -> незагрязнённый baseline и контроль
+    log(f"POISON {attacker}->{victim}: подготовка состояния, снимаю контрольный ответ")
+    reset = isolation.prepare_reset(cfg)
+    run.attempt({"task": "memory_poison", "event": "prepare_reset", "reset": reset})
     clean_reply = _capture_clean_reply(client, victim, cfg)
 
     # собрать payload-спеки по регистрам: статические из payloads.yaml + LLM-мутации

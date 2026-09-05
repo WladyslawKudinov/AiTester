@@ -96,6 +96,15 @@ class Config:
         rel = self.prov["key_cache"]
         return os.path.join(HARNESS_DIR, rel)
 
+    def reset_policy(self):
+        """Политика сброса/lease (секция target.reset, всё опционально с дефолтами)."""
+        r = self.target.get("reset", {}) or {}
+        return {
+            "full_wipe": bool(r.get("full_wipe", False)),        # полный вайп памяти (клобберит со-арендаторов)
+            "lock_path": os.path.join(HARNESS_DIR, r.get("lock_path", "fixtures/.stand.lock")),
+            "stale_seconds": int(r.get("stale_seconds", 300)),
+        }
+
     # --- storage ------------------------------------------------------------------
     @property
     def mongo(self):

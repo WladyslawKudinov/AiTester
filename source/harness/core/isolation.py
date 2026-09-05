@@ -6,13 +6,20 @@
 Всё параметризовано config/target.yaml (имена коллекций, ключ рабочей памяти).
 """
 
+import contextlib
+import fcntl
+import os
 import random
 import re
 import time
 import uuid
 
-from ..core.config import load
+from ..core.config import load, HARNESS_DIR
 from ..oracle import state
+
+# Векторы, МЕНЯЮЩИЕ персистентное состояние стенда (память/политика). Сброс/lease нужны только им;
+# BAC (data-layer/owner/agent-read) — read-only, сброс на них не делаем (иначе бьём чужой стейт).
+STATE_MUTATING = {"memory_poisoning", "within_user", "chain"}
 
 # Безобидные слова-канарейки для отравления. ВАЖНО: маркер — чистое обиходное слово БЕЗ
 # кодового суффикса-«набора букв»: строку вида ZOO-5CDCF5 сильная модель распознаёт как тестовый
@@ -124,6 +131,52 @@ def clear_working(cus=None, session=None, cfg=None):
     if keys:
         r.delete(*keys)
     return len(keys)
+
+
+def mutates_state(vector_type):
+    """True, если вектор меняет персистентное состояние стенда (нужны lease + подготовка).
+    BAC-чтение → False (сброс не делаем)."""
+    return str(vector_type) in STATE_MUTATING
+
+
+@contextlib.contextmanager
+def stand_lease(cfg=None, timeout=None):
+    """Advisory файловый мьютекс на стенд: сериализует state-меняющие прогоны, чтобы два прогона не
+    били один стенд одновременно (иначе reset/запись одного затрёт состояние другого — уже ловили).
+    Не блокирует прогоны против ДРУГОГО стенда (lock-файл привязан к этому чекауту cui)."""
+    cfg = cfg or load()
+    pol = cfg.reset_policy()
+    path = pol["lock_path"]
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    timeout = pol["stale_seconds"] if timeout is None else timeout
+    f = open(path, "w")
+    deadline = time.time() + timeout
+    while True:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if time.time() > deadline:
+                f.close()
+                raise TimeoutError(f"стенд занят: не удалось взять lease {path} за {timeout}s")
+            time.sleep(1)
+    try:
+        f.write(f"{os.getpid()} {time.time()}\n")
+        f.flush()
+        yield
+    finally:
+        fcntl.flock(f, fcntl.LOCK_UN)
+        f.close()
+
+
+def prepare_reset(cfg=None, full=False):
+    """Подготовка состояния перед state-меняющим прогоном. По умолчанию — ТОЧЕЧНАЯ чистка канареек
+    (не трогает чужие/реальные записи). Полный вайп (reset_memory) — только явным full=True или
+    reset.full_wipe в конфиге (он клобберит со-арендаторов). Возвращает {mode, removed}."""
+    cfg = cfg or load()
+    if full or cfg.reset_policy().get("full_wipe"):
+        return {"mode": "full", "removed": reset_memory(cfg)}
+    return {"mode": "scoped", "removed": purge_all_canaries(cfg)}
 
 
 class RunIsolation:
