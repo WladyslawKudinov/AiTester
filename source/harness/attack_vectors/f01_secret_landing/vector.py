@@ -54,7 +54,11 @@ class SecretLanding(AttackVector):
                 client.dialog(key, turns, session_id=sid, auth_mode="vulnerable")
                 fin = client.finalize(key, sid, via=trigger, auth_mode="vulnerable")
 
-                landed = state.marker_landed_user(marker, attacker, cfg)     # секрет с канарейкой на semantic
+                # секрет садится в ЛЮБОЙ персистентный ярус; dialog хранит реплики ДОСЛОВНО (persist_dialog),
+                # поэтому токен там переживает консолидацию, даже если суммаризатор выкинул его из semantic
+                landed_tier = next((t for t in ("dialog", "episodic", "semantic")
+                                    if state.find_marker(marker, t, cfg, user_id=attacker)), None)
+                landed = landed_tier is not None
                 spread = bool(state.marker_in_victim_context(marker, attacker, cfg)["present"]) if landed else False
 
                 n += 1
@@ -62,7 +66,7 @@ class SecretLanding(AttackVector):
                 e3 += int(spread)
                 ctx.run.attempt({
                     "vector": self.name, "seq": i, "marker": marker, "user_text": turns,
-                    "E2_secret_landed": landed, "E3_in_context": spread,
+                    "E2_secret_landed": landed, "landing_tier": landed_tier, "E3_in_context": spread,
                     "finalize_status": fin["status"], "ok": bool(landed),
                 })
                 isolation.cleanup_marker(marker, cfg)
@@ -80,8 +84,8 @@ class SecretLanding(AttackVector):
              "memory_tier": "semantic (scope=user)", "attacker": summary.get("attacker"),
              "trigger": self.params.get("trigger", "endpoint"),
              "call": "попросить сохранить ключ/карту -> токен садится в открытом виде"},
-            f"дифф semantic_memories: токен с канарейкой приземлился (нет REDACT на write-path); "
-            f"E3 позже {summary.get('E3_spread')}/{n}",
+            f"дифф персистентных ярусов (dialog/episodic/semantic): токен с канарейкой приземлился "
+            f"в открытом виде (нет REDACT на write-path); E3 позже {summary.get('E3_spread')}/{n}",
             rate,
             "high" if rate["nonzero"] else "info",
             status="demonstrated" if rate["nonzero"] else "not-demonstrated",
