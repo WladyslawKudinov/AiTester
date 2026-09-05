@@ -263,9 +263,11 @@ def run_mvp(run, cfg=None, attempts=5, multiturn=False, max_turns=5):
     amv = agent_mediated_campaign(run, cfg, attacker, victim, "vulnerable",
                                   attacker_models=None, n_gen=attempts, use_llm=True,
                                   multiturn=multiturn, max_turns=max_turns)
+    # protected — только ПОДТВЕРЖДЕНИЕ блокировки (пара), многоходовую эскалацию тут не гоняем
+    # (дорого и не нужно): single-shot надёжно показывает, что закрыто.
     amp = agent_mediated_campaign(run, cfg, attacker, victim, "protected",
                                   attacker_models=None, n_gen=attempts, use_llm=True,
-                                  multiturn=multiturn, max_turns=max_turns)
+                                  multiturn=False, max_turns=max_turns)
     summary["channels"]["agent_mediated"] = {
         "vulnerable": {"attempts": amv["attempts"], "leaks": amv["leaks"], "rate": amv["rate"],
                        "examples": amv["examples"]},
