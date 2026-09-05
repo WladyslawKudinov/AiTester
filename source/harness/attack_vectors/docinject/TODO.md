@@ -18,7 +18,7 @@
 - Реализация — планировщик поверх готового `_one()`; `search=fixed` (дефолт) не трогать. Инварианты:
   config-driven, вердикт за оракулом, failsafe, отчёты не ломать.
 
-Полный промпт исполнителю: `~/Desktop/analysis/mem_attack/PROMPT_ORACLE_LOOP.md`.
+Полный дизайн + промпт исполнителю: **`ORACLE_LOOP.md`** (рядом, в этой папке).
 Обоснование и методы: `docs/MEMORY_POISONING_METHODS.md` (P0-P6).
 
 ## Прочее
