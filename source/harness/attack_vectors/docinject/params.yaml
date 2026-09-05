@@ -1,0 +1,52 @@
+# Параметры docinject. Override из CLI: docinject--carrier=static docinject--mode=stealth
+params:
+  attempts:
+    type: int
+    default: 5
+    description: "Раундов на каждый профиль (доля успеха + Wilson-CI)."
+  mode:
+    type: str
+    default: all
+    options: [all, explicit, stealth]
+    description: "all=2 профиля (explicit+stealth, разные маркеры); иначе один профиль."
+  carrier:
+    type: str
+    default: llm
+    options: [llm, static]
+    description: "llm=простая модель пишет носитель; static=шаблон из конфига (no-LLM, для тестов)."
+  reset_each:
+    type: bool
+    default: true
+    description: "Чистить память перед КАЖДЫМ кейсом (scoped purge) — железная атрибуция."
+  gen_model:
+    type: str
+    default: ""
+    description: "Модель носителя (пусто = слот attacker). Только при carrier=llm."
+  filler_min:
+    type: int
+    default: 1
+    description: "Мин. подготовительных фраз перед документом."
+  filler_max:
+    type: int
+    default: 2
+    description: "Макс. подготовительных фраз."
+  profiles:
+    type: str
+    default: ""
+    description: "Явный список профилей через запятую (напр. precedent,authority,sysnote). Перебивает mode."
+  framing:
+    type: str
+    default: ""
+    description: "Override framing: imperative|metadata|precedent|authority|sysnote (задаёт одну комбинацию)."
+  doc_kind:
+    type: str
+    default: ""
+    description: "Override жанр: compliance_memo|policy_update|style_guide|onboarding|quarterly_review|market_note."
+  placement:
+    type: str
+    default: ""
+    description: "Override расположение блока: header|footer|inline."
+  domain:
+    type: str
+    default: ""
+    description: "Домен носителя (пусто = target.description)."
