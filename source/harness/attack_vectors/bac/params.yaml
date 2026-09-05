@@ -12,3 +12,7 @@ params:
     type: int
     default: 5
     description: "multiturn: макс. ходов в диалоге."
+  warmup:
+    type: int
+    default: 1
+    description: "Разогревочных сообщений в той же сессии перед BAC-запросом (0 = выкл)."

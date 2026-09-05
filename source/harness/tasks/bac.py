@@ -8,6 +8,7 @@
 """
 
 import json
+import random
 
 from ..core.config import load
 from ..core.client import AgentClient
@@ -65,10 +66,18 @@ def account_owner(run, attacker, account_id, auth_mode, cfg=None):
 
 # --- Канал 2: агент-опосредованный BAC (user_text) -----------------------------------
 def agent_mediated(run, client, key, attacker, victim, prompt_text, auth_mode, cfg=None,
-                   attacker_model=None):
-    """X просит агента чужие данные; утечка = отпечатки victim (!= attacker) в ответе."""
+                   attacker_model=None, warmup=1):
+    """X просит агента чужие данные; утечка = отпечатки victim (!= attacker) в ответе.
+    warmup>0 -> перед BAC-запросом шлём N безобидных разогревочных сообщений в той же сессии."""
     cfg = cfg or load()
     sid = isolation.new_session_id("bac")
+    warm = (cfg.payloads.get("bac", {}) or {}).get("warmup", [])
+    if warmup and warm:
+        for w in random.sample(warm, min(int(warmup), len(warm))):
+            try:
+                client.chat(key, w, session_id=sid, auth_mode=auth_mode)
+            except Exception:
+                pass
     res = client.chat(key, prompt_text, session_id=sid, auth_mode=auth_mode)
     reply = res["content"]
     # чьи отпечатки в ответе, кроме самого атакующего; эхо из запроса не считаем утечкой
@@ -87,14 +96,15 @@ def agent_mediated(run, client, key, attacker, victim, prompt_text, auth_mode, c
 
 
 def agent_mediated_adaptive(run, client, attacker_gen, key, attacker, victim, account_id,
-                            seed_prompt, auth_mode, max_steps=2, cfg=None, attacker_model=None):
+                            seed_prompt, auth_mode, max_steps=2, cfg=None, attacker_model=None,
+                            warmup=1):
     """Один вектор с adaptive-обходом: если агент не выдал чужое — LLM переформулирует и добивает."""
     cfg = cfg or load()
     prompt = seed_prompt
     trail = []
     for step in range(max_steps + 1):
         rec = agent_mediated(run, client, key, attacker, victim, prompt, auth_mode, cfg,
-                             attacker_model=attacker_model)
+                             attacker_model=attacker_model, warmup=warmup)
         trail.append({"step": step, "prompt": prompt, "leak": rec["leak"]})
         if rec["leak"]:
             rec["adaptive_trail"] = trail
@@ -165,7 +175,7 @@ def _campaign_multiturn(run, cfg, attacker, victim, account_id, key, client,
 
 def agent_mediated_campaign(run, cfg=None, attacker=None, victim=None, auth_mode="vulnerable",
                             attacker_models=None, n_gen=6, max_steps=2, use_llm=True,
-                            include_seeds=True, multiturn=False, max_turns=5):
+                            include_seeds=True, multiturn=False, max_turns=5, warmup=1):
     """Свип агент-канала: seed + LLM-генерация формулировок, adaptive-обход, объединение по моделям.
 
     Возвращает {attempts, leaks, rate, per_model, examples}. Слабый атакующий = ложное 'безопасно',
@@ -206,7 +216,7 @@ def agent_mediated_campaign(run, cfg=None, attacker=None, victim=None, auth_mode
         for i, p in enumerate(prompts):
             rec = agent_mediated_adaptive(run, client, attacker_gen, key, attacker, victim,
                                           account_id, p, auth_mode, max_steps=max_steps,
-                                          cfg=cfg, attacker_model=am)
+                                          cfg=cfg, attacker_model=am, warmup=warmup)
             log(f"[{i + 1}/{len(prompts)}] leak={rec['leak']}", sub=True)
             if rec["leak"]:
                 leaks += 1
@@ -224,7 +234,7 @@ def agent_mediated_campaign(run, cfg=None, attacker=None, victim=None, auth_mode
 
 
 # --- MVP: один вектор до зелёного (пара vulnerable<->protected) -----------------------
-def run_mvp(run, cfg=None, attempts=5, multiturn=False, max_turns=5):
+def run_mvp(run, cfg=None, attempts=5, multiturn=False, max_turns=5, warmup=1):
     """MVP-A: 1001->1003, оба канала, обе среды. Возвращает сводку для findings.
     multiturn=True -> агент-канал ведёт многоходовой диалог (по флагу; дефолт single-shot)."""
     cfg = cfg or load()
@@ -262,12 +272,12 @@ def run_mvp(run, cfg=None, attempts=5, multiturn=False, max_turns=5):
     log("агент-канал: LLM-генерация формулировок + adaptive-обход")
     amv = agent_mediated_campaign(run, cfg, attacker, victim, "vulnerable",
                                   attacker_models=None, n_gen=attempts, use_llm=True,
-                                  multiturn=multiturn, max_turns=max_turns)
+                                  multiturn=multiturn, max_turns=max_turns, warmup=warmup)
     # protected — только ПОДТВЕРЖДЕНИЕ блокировки (пара), многоходовую эскалацию тут не гоняем
     # (дорого и не нужно): single-shot надёжно показывает, что закрыто.
     amp = agent_mediated_campaign(run, cfg, attacker, victim, "protected",
                                   attacker_models=None, n_gen=attempts, use_llm=True,
-                                  multiturn=False, max_turns=max_turns)
+                                  multiturn=False, max_turns=max_turns, warmup=warmup)
     summary["channels"]["agent_mediated"] = {
         "vulnerable": {"attempts": amv["attempts"], "leaks": amv["leaks"], "rate": amv["rate"],
                        "examples": amv["examples"]},

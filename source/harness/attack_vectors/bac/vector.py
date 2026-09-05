@@ -29,7 +29,8 @@ class BacVector(AttackVector):
         return bac.run_mvp(ctx.run, ctx.cfg,
                            attempts=int(p.get("attempts", 5)),
                            multiturn=bool(p.get("multiturn", False)),
-                           max_turns=int(p.get("max_turns", 5)))
+                           max_turns=int(p.get("max_turns", 5)),
+                           warmup=int(p.get("warmup", 1)))
 
     def findings(self, summary, ctx):
         fs = []
